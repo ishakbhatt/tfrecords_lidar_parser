@@ -47,8 +47,13 @@ See [record_writer in tensorflow](https://github.com/tensorflow/tensorflow/blob/
 ## Decode `data` field in TFRecord
 Once the raw data is extracted from the TFRecord, `data` needs to be decoded using the proto classes generated from `protoc`.
 
-This is done with `read_data.hpp/.cpp`.
+This is done with the ParseFromArray function from the protocol buffer C++ API for every frame that came from the tfrecord.
 
-How we are going to do this:
-- Each laser scan has an RI return (Range Image Return, the surface a pulse hits) and there can be many (closest is RI return 1)
-- 
+The final `data` is decoded as a `CompressedFrameLaserData` type.
+
+## Visualizing lidar data
+`CompressedFrameLaserData` has compressed data that needs to be decompressed. They are zlib-compressed, as noted in the `dataset.proto` comments.
+
+Thus, the first step is to decompress the data. Then, PCL has an API to visualize point cloud data. We can take the raw data, convert to point cloud data, and visualize that data. 
+
+We also have to convert the raw range image format (spherical) that comes from the LIDAR to proper 3D xyz coordinates. This data is not readily available. We get zlib-compressed data that is all deltas. From there, we recover the range image with distances and angles. Then, we convert from polar/spherical to cartesian 3D points and do a coordinate transform from LIDAR to world.
