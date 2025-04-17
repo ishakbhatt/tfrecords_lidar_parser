@@ -5,8 +5,6 @@
 #include <vector>
 #include <string>
 
-#include <zlib>
-#include <Eigen/Dense>
 #include <pcl/visualization/pcl_visualizer.hpp>
 
 /*

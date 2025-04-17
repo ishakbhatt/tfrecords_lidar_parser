@@ -1,32 +1,37 @@
 #include "lidar_decoder.hpp"
 
-LidarDecoder::LidarDecoder() {}
+LidarDecoder::LidarDecoder()
+{
+    laser_frames = {};
+    decompressed_data = "";
+    points = {{}};
+}
 
 void LidarDecoder::decode_raw_data(TFRecordParser& parser)
 {
 
     for(auto frame : parser.frames)
     {
-        auto * lidar_frame = new waymo::open_dataset::CompressedFrameLaserData();
-        if(!lidar_frame.ParseFromArray(frame->data, frame->record_length))
+        auto * laser_frame = new waymo::open_dataset::CompressedFrameLaserData();
+        if(!laser_frame->ParseFromArray(frame->data, frame->record_length))
         {
             std::cerr << "Failed to parse lidar data" << std::endl;;
         }
 
         if(DEBUG)
         {
-            std::cout << "Lasers Size: "<< lidar_frame.lasers_size() << std::endl;
+            std::cout << "Lasers Size: "<< laser_frame->lasers_size() << std::endl;
         }
-        lidar_frames.push_back(lidar_frame);
+        laser_frames.push_back(laser_frame);
     }
 }
 
-std::string LidarDecoder::decompress_laser_data(std::string & compressed_data)
+std::vector<std::vector<std::array<float, 4>>> LidarDecoder::decompress_laser_data(std::string & compressed_data)
 {
     size_t compressed_size = compressed_data.size();
 
     size_t decompressed_size = 1024; // one byte
-    std::string decompressed_data(decompressed_data);
+    std::string decompressed_bytes(decompressed_size, '\0');
 
     z_stream zs;
     memset(&zs, 0, sizeof(zs));
@@ -38,10 +43,10 @@ std::string LidarDecoder::decompress_laser_data(std::string & compressed_data)
     }
 
     // Set input and output buffers
-    zs.next_in = compressed_data.data();
+    zs.next_in = reinterpret_cast<Bytef*>(compressed_data.data());
     zs.avail_in = compressed_size;
 
-    zs.next_out = decompressed_data.data();
+    zs.next_out = reinterpret_cast<Bytef*>(decompressed_bytes.data());
     zs.avail_out = decompressed_size;
 
     // Decompress
@@ -62,7 +67,25 @@ std::string LidarDecoder::decompress_laser_data(std::string & compressed_data)
     // clean up zlib
     inflateEnd(&zs);
 
+    const float* decompressed_float_data = reinterpret_cast<const float*>(decompressed_bytes.data());
+
+    std::vector<std::vector<std::array<float, 4>>> decompressed_data(H, std::vector<std::array<float, 4>>(W));
+
+
+    // decompressed image is of shape: [H][W][4]
+    for (int i = 0; i < H; ++i)
+    {
+        for (int j = 0; j < W; ++j)
+        {
+            for (int k = 0; k < 4; ++k)
+            {
+                decompressed_data[i][j][k] = decompressed_float_data[i * W * 4 + j * 4 + k];
+            }
+        }
+    }
+
     return decompressed_data;
+
 }
 
 
@@ -72,15 +95,15 @@ void LidarDecoder::decompressed_data_to_points()
     for(auto & frame : laser_frames)
     {
         // compressed range data to decompressed
-        std::string range_image_delta_compressed = frame->ri_return1()->range_image_delta_compressed();
-        std::vector<std::vector<std::array<float, 4>> range_image_delta = decompress_laser_data(range_image_delta_compressed); // 2D tensor with 4 values
+        std::string range_image_delta_compressed = frame->lasers(TOP_LIDAR).ri_return1().range_image_delta_compressed();
+        std::vector<std::vector<std::array<float, 4>>> range_image_delta = decompress_laser_data(range_image_delta_compressed); // 2D tensor with 4 values
 
         // compressed transform to decompressed
-        std::string range_image_pose_delta_compressed = frame->ri_return1->range_image_pose_delta_compressed();
-        std::vector<std::vector<std::array<float, 4>> range_image_pose = decompress_laser_data(range_image_pose_delta_compressed);
+        std::string range_image_pose_delta_compressed = frame->lasers(TOP_LIDAR).ri_return1().range_image_pose_delta_compressed();
+        std::vector<std::vector<std::array<float, 4>>> range_image_pose = decompress_laser_data(range_image_pose_delta_compressed);
 
-        size_t H = range_image_delta.size();
-        size_t W = range_image_delta.at(0).size();
+        H = range_image_delta.size();
+        W = range_image_delta.at(0).size();
 
         for(size_t i = 0; i < H; ++i)
         {
@@ -91,7 +114,7 @@ void LidarDecoder::decompressed_data_to_points()
                 /* Polar coodinates: range, horizontal angle (theta), vertical angle (phi) */
                 float range = range_image_delta[i][j][0];
                 float theta = j * ((2 * M_PI) / W);
-                const auto& calibration = frame.laser_calibrations(i);
+                const auto& calibration = frame->laser_calibrations(i);
 
                 // use min-max-value linear interpolation to compute phi
                 double phi_min = calibration.beam_inclination_min();
@@ -128,16 +151,16 @@ void LidarDecoder::decompressed_data_to_points()
 
                 // transform x y z from lidar to world coordinates, assuming standard convention
                 // https://eigen.tuxfamily.org/dox/group__TutorialGeometry.html
-                Eigen::AngleAxisd rollAngle(roll, Eigen::Vector3d::UnitX());
-                Eigen::AngleAxisd pitchAngle(pitch, Eigen::Vector3d::UnitY());
-                Eigen::AngleAxisd yawAngle(yaw, Eigen::Vector3d::UnitZ());
+                Eigen::AngleAxisd rollAngle(roll_transform, Eigen::Vector3d::UnitX());
+                Eigen::AngleAxisd pitchAngle(pitch_transform, Eigen::Vector3d::UnitY());
+                Eigen::AngleAxisd yawAngle(yaw_transform, Eigen::Vector3d::UnitZ());
 
-                Eigen::Matrix4f transform_mat = Eigen::Matrix4f::Identity();
+                Eigen::Matrix4d transform_mat = Eigen::Matrix4d::Identity();
 
-                Eigen::Matrix3d rotation = transform_mat * (yawAngle * pitchAngle * rollAngle);
+                Eigen::Matrix3d rotation = (yawAngle * pitchAngle * rollAngle).toRotationMatrix();
 
                 transform_mat.block<3,3>(0, 0) = rotation;
-                transform_mat.block<4,1>(0, 3) = translation;
+                transform_mat.block<3,1>(0, 3) = translation;
 
                 // perform a homogeneous transformation (4 x 4 * 4 x 1)
                 Eigen::Vector4d point_h(x, y, z, 1.0);
@@ -154,14 +177,6 @@ void LidarDecoder::decompressed_data_to_points()
 
     }
 
-    // decompressed data to DeltaEncodedData -- https://github.com/waymo-research/waymo-open-dataset/blob/master/src/waymo_open_dataset/protos/compressed_lidar.proto#L78
-//    waymo::open_dataset::DeltaEncodedData delta_encoded_data;
-
-    // get delta_encoded_data attributes
-//    auto& residual = delta_encoded_data.residual();
-//    auto& mask = delta_encoded_data.mask();
-//    auto& metadata = delta_encoded_data.metadata();
-
     std::cout << "Raw lidar ranges to cartesian." << std::endl;
 
 }
@@ -169,5 +184,8 @@ void LidarDecoder::decompressed_data_to_points()
 
 LidarDecoder::~LidarDecoder() 
 {
-    delete[] lidar_frames;
+    for(auto laser : laser_frames)
+    {
+        delete laser;
+    }
 }
