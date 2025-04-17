@@ -14,6 +14,8 @@
 #define TOP_LIDAR 1
 #define DEBUG true
 
+using PointCloudPtr = std::shared_ptr<std::vector<Eigen::Vector3d>>;
+
 /*
 * lidar_decoder.cpp/hpp takes the vector of frames 
 * and decodes them into usable lidar messages.
@@ -25,18 +27,21 @@ class LidarDecoder
 {
 
 private:
+
+    std::vector<std::vector<std::array<float, 4>>> decompress_laser_data(std::string & compressed_data);
+    void bytes_to_points();
+
     std::vector<waymo::open_dataset::CompressedFrameLaserData *> laser_frames;
     std::string decompressed_data;
-    std::vector<Eigen::Vector3d> points;
+    PointCloudPtr points_ptr;
 
     size_t H;
     size_t W;
 
 public:
-    LidarDecoder();
+    LidarDecoder(PointCloudPtr points_ptr);
     void decode_raw_data(TFRecordParser& parser);
-    std::vector<std::vector<std::array<float, 4>>> decompress_laser_data(std::string & compressed_data);
-    void decompressed_data_to_points();
+    PointCloudPtr get_lidar_points();
     ~LidarDecoder();
 };
 

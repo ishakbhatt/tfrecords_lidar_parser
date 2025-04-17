@@ -1,9 +1,10 @@
 #include <lidar_visualizer.hpp>
 
 
-LidarVisualizer::LidarVisualizer()
+LidarVisualizer::LidarVisualizer(PointCloudPtr points_ptr) : points_ptr(points_ptr)
 {
 
+    
 }
 
 LidarVisualizer::~LidarVisualizer()
@@ -21,10 +22,10 @@ void LidarVisualizer::visualize_laser_data()
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
 
-    for(const auto& pt : points)
+    for(const auto& pt : points_ptr)
     {
         // add points to cloud with emplace_back (in-place push_back)
-        cloud->points.emplace_back(pt.x(), pt.y(), pt.z());
+        cloud->points_ptr->emplace_back(pt.x(), pt.y(), pt.z());
     }
 
     pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer ("3D Viewer"));

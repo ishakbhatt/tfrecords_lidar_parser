@@ -1,10 +1,9 @@
 #include "lidar_decoder.hpp"
 
-LidarDecoder::LidarDecoder()
+LidarDecoder::LidarDecoder(PointCloudPtr points_ptr) : points_ptr(points_ptr)
 {
     laser_frames = {};
     decompressed_data = "";
-    points = {{}};
 }
 
 void LidarDecoder::decode_raw_data(TFRecordParser& parser)
@@ -24,6 +23,10 @@ void LidarDecoder::decode_raw_data(TFRecordParser& parser)
         }
         laser_frames.push_back(laser_frame);
     }
+
+    // raw bytes to points
+    bytes_to_points();
+
 }
 
 std::vector<std::vector<std::array<float, 4>>> LidarDecoder::decompress_laser_data(std::string & compressed_data)
@@ -89,7 +92,7 @@ std::vector<std::vector<std::array<float, 4>>> LidarDecoder::decompress_laser_da
 }
 
 
-void LidarDecoder::decompressed_data_to_points()
+void LidarDecoder::bytes_to_points()
 {
     // for every laser scan, convert to cartesian
     for(auto & frame : laser_frames)
@@ -168,7 +171,7 @@ void LidarDecoder::decompressed_data_to_points()
                 Eigen::Vector4d transformed_point = transform_mat * point_h;
 
                 // get first 3 values of transformed point
-                points.emplace_back(transformed_point.head<3>());
+                points_ptr->emplace_back(transformed_point.head<3>());
 
             }
         }
@@ -181,6 +184,10 @@ void LidarDecoder::decompressed_data_to_points()
 
 }
 
+PointCloudPtr LidarDecoder::get_lidar_points()
+{
+    return points_ptr;
+}
 
 LidarDecoder::~LidarDecoder() 
 {

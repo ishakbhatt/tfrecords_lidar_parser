@@ -5,7 +5,9 @@
 #include <vector>
 #include <string>
 
-#include <pcl/visualization/pcl_visualizer.hpp>
+#include <pcl/visualization/pcl_visualizer.h>
+
+using PointCloudPtr = std::shared_ptr<std::vector<Eigen::Vector3d>>;
 
 /*
 * lidar_visualizer.cpp/hpp takes raw Eigen::Vector3d 
@@ -16,9 +18,11 @@ class LidarVisualizer
 {
 
 private:
+    
+    PointCloudPtr points_ptr;
 
 public:
-    LidarVisualizer();
+    LidarVisualizer(PointCloudPtr points_ptr);
 
     void visualize_laser_data();
 
