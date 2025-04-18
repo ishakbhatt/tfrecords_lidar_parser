@@ -25,6 +25,7 @@ void LidarDecoder::decode_raw_data(TFRecordParser& parser)
     }
 
     // raw bytes to points
+    std::cout << "bruh" << std::endl;
     bytes_to_points();
 
 }
@@ -33,8 +34,9 @@ std::vector<std::vector<std::array<float, 4>>> LidarDecoder::decompress_laser_da
 {
     size_t compressed_size = compressed_data.size();
 
-    size_t decompressed_size = 1024; // one byte
-    std::string decompressed_bytes(decompressed_size, '\0');
+    size_t decompressed_size = 32768; // one byte
+    std::string decompressed_str;
+    char decompressed_bytes[decompressed_size];
 
     z_stream zs;
     memset(&zs, 0, sizeof(zs));
@@ -45,32 +47,30 @@ std::vector<std::vector<std::array<float, 4>>> LidarDecoder::decompress_laser_da
         std::cerr << "Could not initialize zlib object." << std::endl;
     }
 
+    int ret = 0;
+
     // Set input and output buffers
     zs.next_in = reinterpret_cast<Bytef*>(compressed_data.data());
     zs.avail_in = compressed_size;
 
-    zs.next_out = reinterpret_cast<Bytef*>(decompressed_bytes.data());
-    zs.avail_out = decompressed_size;
+    do {
+        zs.next_out = reinterpret_cast<Bytef*>(decompressed_bytes);
+        zs.avail_out = sizeof(decompressed_bytes);
 
-    // Decompress
-    int ret = inflate(&zs, Z_FINISH);
-    
-    // error checking
-    if (ret != Z_STREAM_END && ret != Z_OK) 
-    {
-        std::cerr << "zlib inflate error: " << ret << std::endl;
-        // clean up in case of error
-        inflateEnd(&zs);
-    }
+        ret = inflate(&zs, 0);
 
-    // Get the actual decompressed size
+        if (ret != Z_OK && ret != Z_STREAM_END) {
+            inflateEnd(&zs);
+            throw std::runtime_error("zlib inflate error: " + std::to_string(ret));
+        }
 
-    int actual_decompressed_size = decompressed_size - zs.avail_out;
+        decompressed_str.append(decompressed_bytes, sizeof(decompressed_bytes) - zs.avail_out);
+    } while (ret != Z_STREAM_END);
 
     // clean up zlib
     inflateEnd(&zs);
 
-    const float* decompressed_float_data = reinterpret_cast<const float*>(decompressed_bytes.data());
+    const float* decompressed_float_data = reinterpret_cast<const float*>(decompressed_str.data());
 
     std::vector<std::vector<std::array<float, 4>>> decompressed_data(H, std::vector<std::array<float, 4>>(W));
 
@@ -97,8 +97,13 @@ void LidarDecoder::bytes_to_points()
     // for every laser scan, convert to cartesian
     for(auto & frame : laser_frames)
     {
+        std::cout << "bruh2" << std::endl;
+        std::cout << "TOP_LIDAR = " << TOP_LIDAR << ", lasers_size = " << frame->lasers_size() << std::endl;
+
         // compressed range data to decompressed
         std::string range_image_delta_compressed = frame->lasers(TOP_LIDAR).ri_return1().range_image_delta_compressed();
+        std::cout << "TOP_LIDAR = " << TOP_LIDAR << ", lasers_size = " << frame->lasers_size() << std::endl;
+
         std::vector<std::vector<std::array<float, 4>>> range_image_delta = decompress_laser_data(range_image_delta_compressed); // 2D tensor with 4 values
 
         // compressed transform to decompressed
@@ -107,6 +112,8 @@ void LidarDecoder::bytes_to_points()
 
         H = range_image_delta.size();
         W = range_image_delta.at(0).size();
+        
+        std::cout << "bruh2.1" << std::endl;
 
         for(size_t i = 0; i < H; ++i)
         {
@@ -116,12 +123,15 @@ void LidarDecoder::bytes_to_points()
                                                                  
                 /* Polar coodinates: range, horizontal angle (theta), vertical angle (phi) */
                 float range = range_image_delta[i][j][0];
+                std::cout << "bruh2.3" << std::endl;
                 float theta = j * ((2 * M_PI) / W);
                 const auto& calibration = frame->laser_calibrations(i);
+                std::cout << "bruh2.2" << std::endl;
 
                 // use min-max-value linear interpolation to compute phi
                 double phi_min = calibration.beam_inclination_min();
                 double phi_max = calibration.beam_inclination_max();
+                std::cout << "bruh3" << std::endl;
 
                 /*
 
@@ -149,6 +159,7 @@ void LidarDecoder::bytes_to_points()
                 float x_transform = range_image_pose[i][j][3];
                 float y_transform = range_image_pose[i][j][4];
                 float z_transform = range_image_pose[i][j][5];
+                std::cout << "bruh4" << std::endl;
 
                 Eigen::Vector3d translation(x_transform, y_transform, z_transform);
 
@@ -157,6 +168,7 @@ void LidarDecoder::bytes_to_points()
                 Eigen::AngleAxisd rollAngle(roll_transform, Eigen::Vector3d::UnitX());
                 Eigen::AngleAxisd pitchAngle(pitch_transform, Eigen::Vector3d::UnitY());
                 Eigen::AngleAxisd yawAngle(yaw_transform, Eigen::Vector3d::UnitZ());
+                std::cout << "bruh5" << std::endl;
 
                 Eigen::Matrix4d transform_mat = Eigen::Matrix4d::Identity();
 
@@ -169,9 +181,11 @@ void LidarDecoder::bytes_to_points()
                 Eigen::Vector4d point_h(x, y, z, 1.0);
 
                 Eigen::Vector4d transformed_point = transform_mat * point_h;
+                std::cout << "bruh6" << std::endl;
 
                 // get first 3 values of transformed point
                 points_ptr->emplace_back(transformed_point.head<3>());
+                std::cout << "bruh7" << std::endl;
 
             }
         }

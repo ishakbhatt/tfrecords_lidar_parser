@@ -57,3 +57,5 @@ The final `data` is decoded as a `CompressedFrameLaserData` type.
 Thus, the first step is to decompress the data. Then, PCL has an API to visualize point cloud data. We can take the raw data, convert to point cloud data, and visualize that data. 
 
 We also have to convert the raw range image format (spherical) that comes from the LIDAR to proper 3D xyz coordinates. This data is not readily available. We get zlib-compressed data that is all deltas. From there, we recover the range image with distances and angles. Then, we convert from polar/spherical to cartesian 3D points and do a coordinate transform from LIDAR to world.
+
+export CPLUS_INCLUDE_PATH=/usr/include/eigen3:$CMAKE_PREFIX_PATH

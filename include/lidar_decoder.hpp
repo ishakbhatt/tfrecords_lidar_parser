@@ -11,7 +11,7 @@
 
 #include <Eigen/Dense>
 
-#define TOP_LIDAR 1
+#define TOP_LIDAR 0
 #define DEBUG true
 
 using PointCloudPtr = std::shared_ptr<std::vector<Eigen::Vector3d>>;
