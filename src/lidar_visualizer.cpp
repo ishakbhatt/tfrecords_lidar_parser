@@ -20,12 +20,12 @@ void LidarVisualizer::visualize_laser_data()
     *
     */
 
-    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGB>);
 
-    for(const auto& pt : points_ptr)
+    for(const auto& pt : *points_ptr) // get - returns the raw pointer
     {
         // add points to cloud with emplace_back (in-place push_back)
-        cloud->points_ptr->emplace_back(pt.x(), pt.y(), pt.z());
+        cloud->points.emplace_back(pt.x(), pt.y(), pt.z());
     }
 
     pcl::visualization::PCLVisualizer::Ptr viewer(new pcl::visualization::PCLVisualizer ("3D Viewer"));
@@ -53,14 +53,14 @@ void LidarVisualizer::visualize_laser_data()
     
     viewer->addCoordinateSystem(1.0);
   
-    viewer->addPointCloudNormals<pcl::PointXYZRGB, pcl::Normal>(cloud, normals1, 10, 0.05, "normals1", v1);
-    viewer->addPointCloudNormals<pcl::PointXYZRGB, pcl::Normal>(cloud, normals2, 10, 0.05, "normals2", v2);
+    //viewer->addPointCloudNormals<pcl::PointXYZRGB, pcl::Normal>(cloud, normals1, 10, 0.05, "normals1", v1);
+    //viewer->addPointCloudNormals<pcl::PointXYZRGB, pcl::Normal>(cloud, normals2, 10, 0.05, "normals2", v2);
   
     // Run the visualization
-    while (!viewer.wasStopped()) 
+    while (!viewer->wasStopped()) 
     {
-        viewer.spinOnce();
+        viewer->spinOnce();
     }
 
-    delete cloud;
+    //delete cloud;
 }

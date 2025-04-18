@@ -3,6 +3,8 @@
 #include "lidar_decoder.hpp"
 #include "lidar_visualizer.hpp"
 
+// shared pointer: https://www.geeksforgeeks.org/shared_ptr-in-cpp/
+
 using PointCloudPtr = std::shared_ptr<std::vector<Eigen::Vector3d>>;
 
 int main (int argc, char * argv[])
